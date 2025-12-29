@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { User, Clock, CheckCircle, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react';
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
-import { verificarDisponibilidad, crearReserva } from '../lib/reservations';
+import { verificarDisponibilidad, crearReserva, fechaTieneDisponibilidad, obtenerHorariosDisponibles } from '../lib/reservations';
 
 function ReservationWizard() {
   const [step, setStep] = useState(1);
@@ -18,11 +18,58 @@ function ReservationWizard() {
   const [mensaje, setMensaje] = useState<{tipo: 'error' | 'success' | 'warning', texto: string} | null>(null);
   const [loading, setLoading] = useState(false);
   const [lugaresDisponibles, setLugaresDisponibles] = useState<number | null>(null);
+  const [fechasSinDisponibilidad, setFechasSinDisponibilidad] = useState<Set<string>>(new Set());
+  const [horariosDisponiblesParaFecha, setHorariosDisponiblesParaFecha] = useState<Array<{horario: string, lugares_disponibles: number}>>([]);
 
-  const horariosDisponibles = [
-    "12:00", "12:30", "13:00", "13:30", "14:00", "14:30",
-    "20:00", "20:30", "21:00", "21:30", "22:00", "22:30"
-  ];
+  // Cargar fechas sin disponibilidad cuando cambia el número de personas
+  useEffect(() => {
+    if (!personas) return;
+    cargarFechasSinDisponibilidad();
+  }, [personas]);
+
+  const cargarFechasSinDisponibilidad = async () => {
+    if (!personas) return;
+
+    const fechas = new Set<string>();
+    const hoy = new Date();
+    
+    // Verificar los próximos 60 días
+    for (let i = 0; i < 60; i++) {
+      const fecha = new Date(hoy);
+      fecha.setDate(hoy.getDate() + i);
+      const fechaStr = fecha.toISOString().split('T')[0];
+      
+      const tieneDisponibilidad = await fechaTieneDisponibilidad(fechaStr, personas);
+      
+      if (!tieneDisponibilidad) {
+        fechas.add(fechaStr);
+      }
+    }
+    
+    setFechasSinDisponibilidad(fechas);
+  };
+
+  // Cargar horarios cuando se selecciona una fecha
+  useEffect(() => {
+    if (fecha && personas) {
+      cargarHorariosDisponibles();
+    }
+  }, [fecha, personas]);
+
+  const cargarHorariosDisponibles = async () => {
+    if (!fecha || !personas) return;
+    
+    setLoading(true);
+    try {
+      const fechaStr = fecha.toISOString().split('T')[0];
+      const horarios = await obtenerHorariosDisponibles(fechaStr, personas);
+      setHorariosDisponiblesParaFecha(horarios);
+    } catch (error) {
+      console.error('Error al cargar horarios:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const nextStep = () => {
     if (step === 3 && !validateForm()) return;
@@ -61,6 +108,14 @@ function ReservationWizard() {
     setErrors({});
     setMensaje(null);
     setLugaresDisponibles(null);
+    setFechasSinDisponibilidad(new Set());
+    setHorariosDisponiblesParaFecha([]);
+  };
+
+  // Verificar si una fecha debe estar deshabilitada
+  const isFechaDeshabilitada = (date: Date) => {
+    const fechaStr = date.toISOString().split('T')[0];
+    return fechasSinDisponibilidad.has(fechaStr);
   };
 
   // Verificar disponibilidad cuando selecciona horario
@@ -71,7 +126,7 @@ function ReservationWizard() {
     setMensaje(null);
     
     try {
-      const fechaStr = fecha.toISOString().split('T')[0]; // 'YYYY-MM-DD'
+      const fechaStr = fecha.toISOString().split('T')[0];
       const { disponible, lugaresDisponibles: lugares } = await verificarDisponibilidad(
         fechaStr, 
         hora, 
@@ -219,9 +274,11 @@ function ReservationWizard() {
         .react-datepicker__day--disabled {
           color: #d1d5db;
           cursor: not-allowed;
+          background-color: #fecaca !important;
+          opacity: 0.6;
         }
         .react-datepicker__day--disabled:hover {
-          background-color: transparent;
+          background-color: #fecaca !important;
         }
         .react-datepicker__day--outside-month {
           color: #d1d5db;
@@ -332,6 +389,7 @@ function ReservationWizard() {
               </svg>
               <h2 className="text-2xl font-bold text-gray-800 mb-1">Selecciona fecha y horario</h2>
               <p className="text-sm text-gray-600">Elige cuándo quieres hacer tu reserva</p>
+              <p className="text-sm  text-gray-600 mt-1">(Las fechas en rojo no tienen disponibilidad)</p>
             </div>
 
             <div className="mb-4 bg-gray-50 rounded-xl p-4 flex justify-center">
@@ -345,6 +403,7 @@ function ReservationWizard() {
                 }}
                 inline
                 minDate={new Date()}
+                filterDate={(date) => !isFechaDeshabilitada(date)}
                 locale="es"
                 dateFormat="dd/MM/yyyy"
               />
@@ -354,7 +413,7 @@ function ReservationWizard() {
               <div className="mb-4">
                 <h3 className="text-base font-semibold mb-2 flex items-center gap-2">
                   <Clock className="w-4 h-4 text-orange-500" />
-                  Horarios disponibles
+                  Horarios disponibles ({horariosDisponiblesParaFecha.length})
                 </h3>
                 
                 {/* Mensaje de disponibilidad */}
@@ -371,24 +430,34 @@ function ReservationWizard() {
                   </div>
                 )}
                 
-                <div className="grid grid-cols-6 gap-1.5">
-                  {horariosDisponibles.map((hora) => (
-                    <button
-                      key={hora}
-                      onClick={() => handleSeleccionarHorario(hora)}
-                      disabled={loading}
-                      className={`p-1.5 rounded-lg font-medium text-xs transition-all ${
-                        horario === hora
-                          ? 'bg-orange-500 text-white'
-                          : loading
-                          ? 'bg-gray-100 text-gray-400 cursor-wait'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
-                    >
-                      {hora}
-                    </button>
-                  ))}
-                </div>
+                {horariosDisponiblesParaFecha.length === 0 ? (
+                  <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-center text-sm text-red-800">
+                    No hay horarios disponibles para esta fecha con {personas} personas
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-6 gap-1.5">
+                    {horariosDisponiblesParaFecha.map(({ horario: hora, lugares_disponibles }) => (
+                      <button
+                        key={hora}
+                        onClick={() => handleSeleccionarHorario(hora)}
+                        disabled={loading}
+                        className={`p-1.5 rounded-lg font-medium text-xs transition-all relative ${
+                          horario === hora
+                            ? 'bg-orange-500 text-white'
+                            : loading
+                            ? 'bg-gray-100 text-gray-400 cursor-wait'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                        title={`${lugares_disponibles} lugares disponibles`}
+                      >
+                        {hora}
+                        <span className="block text-[10px] opacity-70">
+                          {lugares_disponibles}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 

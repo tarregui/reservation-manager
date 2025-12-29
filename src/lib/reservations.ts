@@ -3,67 +3,126 @@ import { supabase } from './supabase'
 export interface Reserva {
   id?: string
   personas: number
-  fecha: string // YYYY-MM-DD
-  horario: string // HH:mm
+  fecha: string // formato 'YYYY-MM-DD'
+  horario: string
   nombre: string
   email: string
   telefono: string
   estado?: 'confirmada' | 'cancelada' | 'completada'
 }
 
-/**
- * Verificar disponibilidad (solo lectura)
- * OJO: esto es informativo, la validación REAL está en la RPC
- */
+export interface HorarioDisponible {
+  horario: string
+  lugares_disponibles: number
+}
+
+// Verificar si una fecha tiene disponibilidad
+export async function fechaTieneDisponibilidad(
+  fecha: string,
+  personas: number
+): Promise<boolean> {
+  try {
+    const { data, error } = await supabase.rpc('fecha_tiene_disponibilidad', {
+      p_fecha: fecha,
+      p_personas: personas
+    })
+
+    if (error) {
+      console.error('Error al verificar fecha:', error)
+      return true // En caso de error, permitir selección (fail-safe)
+    }
+
+    return data as boolean
+  } catch (error) {
+    console.error('Error en fechaTieneDisponibilidad:', error)
+    return true
+  }
+}
+
+// Obtener horarios disponibles para una fecha específica
+export async function obtenerHorariosDisponibles(
+  fecha: string,
+  personas: number
+): Promise<HorarioDisponible[]> {
+  try {
+    const { data, error } = await supabase.rpc('horarios_disponibles_por_fecha', {
+      p_fecha: fecha,
+      p_personas: personas
+    })
+
+    if (error) throw error
+    return data as HorarioDisponible[]
+  } catch (error) {
+    console.error('Error al obtener horarios:', error)
+    throw error
+  }
+}
+
+// Verificar disponibilidad de un horario específico
 export async function verificarDisponibilidad(
   fecha: string,
   horario: string,
   personas: number
 ): Promise<{ disponible: boolean; lugaresDisponibles: number }> {
-
-  const { data: config } = await supabase
-    .from('configuracion')
-    .select('capacidad_maxima')
-    .single()
-
-  const capacidadMaxima = config?.capacidad_maxima ?? 40
-
-  const { data: reservas } = await supabase
-    .from('reservas')
-    .select('personas')
-    .eq('fecha', fecha)
-    .eq('horario', horario)
-    .eq('estado', 'confirmada')
-
-  const ocupadas = reservas?.reduce((sum, r) => sum + r.personas, 0) ?? 0
-  const disponibles = capacidadMaxima - ocupadas
-
-  return {
-    disponible: personas <= disponibles,
-    lugaresDisponibles: Math.max(disponibles, 0)
+  try {
+    const horarios = await obtenerHorariosDisponibles(fecha, personas)
+    
+    const horarioEncontrado = horarios.find(h => h.horario === horario)
+    
+    if (horarioEncontrado) {
+      return {
+        disponible: true,
+        lugaresDisponibles: horarioEncontrado.lugares_disponibles
+      }
+    }
+    
+    // Si no está en la lista, calcular manualmente cuántos lugares quedan
+    const { data: config } = await supabase
+      .from('configuracion')
+      .select('capacidad_maxima')
+      .single()
+    
+    const capacidadMaxima = config?.capacidad_maxima || 0
+    
+    // Calcular ocupadas llamando a la función
+    const { data: ocupadas } = await supabase.rpc('personas_ocupadas_en_ventana', {
+      p_fecha: fecha,
+      p_horario: horario
+    })
+    
+    const lugaresDisponibles = capacidadMaxima - (ocupadas || 0)
+    
+    return {
+      disponible: false,
+      lugaresDisponibles: Math.max(0, lugaresDisponibles)
+    }
+  } catch (error) {
+    console.error('Error al verificar disponibilidad:', error)
+    throw error
   }
 }
 
-/**
- * Crear reserva (RPC – ÚNICA forma válida)
- */
+// Crear reserva usando la función SQL
 export async function crearReserva(reserva: Reserva) {
-  const { data, error } = await supabase.rpc('crear_reserva', {
-    p_personas: reserva.personas,
-    p_fecha: reserva.fecha,
-    p_horario: reserva.horario,
-    p_nombre: reserva.nombre,
-    p_email: reserva.email,
-    p_telefono: reserva.telefono
-  })
+  try {
+    const { data, error } = await supabase.rpc('crear_reserva', {
+      p_fecha: reserva.fecha,
+      p_horario: reserva.horario,
+      p_personas: reserva.personas,
+      p_nombre: reserva.nombre,
+      p_email: reserva.email,
+      p_telefono: reserva.telefono
+    })
 
-  if (error) throw error
-  return data
+    if (error) throw error
+    return data
+  } catch (error) {
+    console.error('Error al crear reserva:', error)
+    throw error
+  }
 }
 
-/**
- * Obtener reservas (admin)
- */
+// Obtener todas las reservas (para admin)
 export async function obtenerReservas() {
   const { data, error } = await supabase
     .from('reservas')
@@ -75,9 +134,7 @@ export async function obtenerReservas() {
   return data
 }
 
-/**
- * Cancelar reserva (admin)
- */
+// Cancelar reserva (admin)
 export async function cancelarReserva(id: string) {
   const { error } = await supabase
     .from('reservas')
@@ -87,9 +144,7 @@ export async function cancelarReserva(id: string) {
   if (error) throw error
 }
 
-/**
- * Obtener configuración
- */
+// Obtener configuración
 export async function obtenerConfiguracion() {
   const { data, error } = await supabase
     .from('configuracion')
@@ -100,9 +155,7 @@ export async function obtenerConfiguracion() {
   return data
 }
 
-/**
- * Actualizar configuración (admin)
- */
+// Actualizar configuración (admin)
 export async function actualizarConfiguracion(
   capacidadMaxima: number,
   horariosDisponibles: string[]
