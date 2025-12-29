@@ -3,30 +3,31 @@ import { supabase } from './supabase'
 export interface Reserva {
   id?: string
   personas: number
-  fecha: string // formato 'YYYY-MM-DD'
-  horario: string
+  fecha: string // YYYY-MM-DD
+  horario: string // HH:mm
   nombre: string
   email: string
   telefono: string
   estado?: 'confirmada' | 'cancelada' | 'completada'
 }
 
-// Verificar disponibilidad
+/**
+ * Verificar disponibilidad (solo lectura)
+ * OJO: esto es informativo, la validación REAL está en la RPC
+ */
 export async function verificarDisponibilidad(
-  fecha: string, 
-  horario: string, 
+  fecha: string,
+  horario: string,
   personas: number
 ): Promise<{ disponible: boolean; lugaresDisponibles: number }> {
-  
-  // 1. Obtener capacidad máxima
+
   const { data: config } = await supabase
     .from('configuracion')
     .select('capacidad_maxima')
     .single()
 
-  const capacidadMaxima = config?.capacidad_maxima || 40
+  const capacidadMaxima = config?.capacidad_maxima ?? 40
 
-  // 2. Sumar personas ya reservadas para esa fecha/horario
   const { data: reservas } = await supabase
     .from('reservas')
     .select('personas')
@@ -34,35 +35,35 @@ export async function verificarDisponibilidad(
     .eq('horario', horario)
     .eq('estado', 'confirmada')
 
-  const ocupadas = reservas?.reduce((sum, r) => sum + r.personas, 0) || 0
+  const ocupadas = reservas?.reduce((sum, r) => sum + r.personas, 0) ?? 0
   const disponibles = capacidadMaxima - ocupadas
 
   return {
     disponible: personas <= disponibles,
-    lugaresDisponibles: disponibles
+    lugaresDisponibles: Math.max(disponibles, 0)
   }
 }
 
-// Crear reserva
+/**
+ * Crear reserva (RPC – ÚNICA forma válida)
+ */
 export async function crearReserva(reserva: Reserva) {
-  const { data, error } = await supabase
-    .from('reservas')
-    .insert([{
-      personas: reserva.personas,
-      fecha: reserva.fecha,
-      horario: reserva.horario,
-      nombre: reserva.nombre,
-      email: reserva.email,
-      telefono: reserva.telefono,
-      estado: 'confirmada'
-    }])
-    .select()
+  const { data, error } = await supabase.rpc('crear_reserva', {
+    p_personas: reserva.personas,
+    p_fecha: reserva.fecha,
+    p_horario: reserva.horario,
+    p_nombre: reserva.nombre,
+    p_email: reserva.email,
+    p_telefono: reserva.telefono
+  })
 
   if (error) throw error
   return data
 }
 
-// Obtener todas las reservas (para admin)
+/**
+ * Obtener reservas (admin)
+ */
 export async function obtenerReservas() {
   const { data, error } = await supabase
     .from('reservas')
@@ -74,7 +75,9 @@ export async function obtenerReservas() {
   return data
 }
 
-// Cancelar reserva (admin)
+/**
+ * Cancelar reserva (admin)
+ */
 export async function cancelarReserva(id: string) {
   const { error } = await supabase
     .from('reservas')
@@ -84,7 +87,9 @@ export async function cancelarReserva(id: string) {
   if (error) throw error
 }
 
-// Obtener configuración
+/**
+ * Obtener configuración
+ */
 export async function obtenerConfiguracion() {
   const { data, error } = await supabase
     .from('configuracion')
@@ -95,7 +100,9 @@ export async function obtenerConfiguracion() {
   return data
 }
 
-// Actualizar configuración (admin)
+/**
+ * Actualizar configuración (admin)
+ */
 export async function actualizarConfiguracion(
   capacidadMaxima: number,
   horariosDisponibles: string[]
