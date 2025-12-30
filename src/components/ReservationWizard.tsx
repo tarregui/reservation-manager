@@ -6,6 +6,8 @@ import "react-datepicker/dist/react-datepicker.css";
 import { verificarDisponibilidad, crearReserva, fechaTieneDisponibilidad, obtenerHorariosDisponibles } from '../lib/reservations';
 
 function ReservationWizard() {
+
+
   const [step, setStep] = useState(1);
   const [personas, setPersonas] = useState<number | null>(null);
   const [fecha, setFecha] = useState<Date | null>(null);
@@ -235,34 +237,34 @@ useEffect(() => {
 
   return (
     <div className="w-full max-w-3xl mx-auto">
-    <div className="grid grid-cols-4 gap-0">
-  {[1, 2, 3, 4].map((s, idx) => (
-    <div key={s} className="flex flex-col items-center relative">
+    <div className="grid grid-cols-4 gap-0 mb-5">
+      {[1, 2, 3, 4].map((s, idx) => (
+        <div key={s} className="flex flex-col items-center relative">
+        
+          {/* Línea izquierda */}
+          {idx > 0 && (
+            <div
+              className={`absolute top-4 left-[-50%] w-full h-1 ${
+                step >= s ? 'bg-orange-500' : 'bg-gray-300'
+              }`}
+            />
+          )}
 
-      {/* Línea izquierda */}
-      {idx > 0 && (
-        <div
-          className={`absolute top-4 left-[-50%] w-full h-1 ${
-            step >= s ? 'bg-orange-500' : 'bg-gray-300'
-          }`}
-        />
-      )}
-
-      {/* Número */}
-      <div
-        className={`z-10 w-8 h-8 rounded-full flex items-center justify-center font-semibold text-sm transition-all
-        ${step >= s ? 'bg-orange-500 text-white' : 'bg-gray-300 text-gray-600'}`}
-      >
-        {s}
-      </div>
-
-      {/* Texto */}
-      <span className="mt-2 text-xs text-gray-600 text-center">
-        {['Comensales', 'Fecha', 'Datos', 'Confirmar'][idx]}
-      </span>
+          {/* Número */}
+          <div
+            className={`z-10 w-8 h-8 rounded-full flex items-center justify-center font-semibold text-sm transition-all
+            ${step >= s ? 'bg-orange-500 text-white' : 'bg-gray-300 text-gray-600'}`}
+          >
+            {s}
+          </div>
+            
+          {/* Texto */}
+          <span className="mt-2 text-xs text-gray-600 text-center">
+            {['Comensales', 'Fecha', 'Datos', 'Confirmar'][idx]}
+          </span>
+        </div>
+      ))}
     </div>
-  ))}
-</div>
 
 
       <style>{`
