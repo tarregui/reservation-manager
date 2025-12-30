@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+/* eslint-disable react-hooks/exhaustive-deps */
+import { useState, useEffect, useCallback } from "react";
 import { User, Clock, CheckCircle, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react';
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
@@ -27,27 +28,41 @@ function ReservationWizard() {
     cargarFechasSinDisponibilidad();
   }, [personas]);
 
-  const cargarFechasSinDisponibilidad = async () => {
-    if (!personas) return;
+  // Hacer la función accesible desde el useEffect
+const cargarFechasSinDisponibilidad = useCallback(async () => {
+  if (!personas) return;
 
-    const fechas = new Set<string>();
-    const hoy = new Date();
+  const fechas = new Set<string>();
+  const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+  
+  // Verificar los próximos 60 días
+  for (let i = 0; i < 60; i++) {
+    const fecha = new Date(hoy);
+    fecha.setDate(hoy.getDate() + i);
+    const fechaStr = fecha.toISOString().split('T')[0];
     
-    // Verificar los próximos 60 días
-    for (let i = 0; i < 60; i++) {
-      const fecha = new Date(hoy);
-      fecha.setDate(hoy.getDate() + i);
-      const fechaStr = fecha.toISOString().split('T')[0];
-      
-      const tieneDisponibilidad = await fechaTieneDisponibilidad(fechaStr, personas);
-      
-      if (!tieneDisponibilidad) {
-        fechas.add(fechaStr);
-      }
+    const tieneDisponibilidad = await fechaTieneDisponibilidad(fechaStr, personas);
+    
+    if (!tieneDisponibilidad) {
+      fechas.add(fechaStr);
     }
+  }
+  
+  setFechasSinDisponibilidad(fechas);
+}, [personas]);
+
+// Recargar disponibilidad cuando se selecciona una fecha
+useEffect(() => {
+  if (fecha && personas) {
+    // Recargar las fechas sin disponibilidad después de un breve delay
+    const timeout = setTimeout(() => {
+      cargarFechasSinDisponibilidad();
+    }, 100);
     
-    setFechasSinDisponibilidad(fechas);
-  };
+    return () => clearTimeout(timeout);
+  }
+}, [fecha, personas, cargarFechasSinDisponibilidad]);
 
   // Cargar horarios cuando se selecciona una fecha
   useEffect(() => {
@@ -55,7 +70,8 @@ function ReservationWizard() {
       cargarHorariosDisponibles();
     }
   }, [fecha, personas]);
-
+  
+  
   const cargarHorariosDisponibles = async () => {
     if (!fecha || !personas) return;
     
@@ -112,10 +128,20 @@ function ReservationWizard() {
     setHorariosDisponiblesParaFecha([]);
   };
 
-  // Verificar si una fecha debe estar deshabilitada
+  // Verificar si una fecha debe estar deshabilitada (solo para fechas >= hoy)
   const isFechaDeshabilitada = (date: Date) => {
-    const fechaStr = date.toISOString().split('T')[0];
-    return fechasSinDisponibilidad.has(fechaStr);
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+    const fechaComparar = new Date(date);
+    fechaComparar.setHours(0, 0, 0, 0);
+    
+    // Solo aplicar el filtro de disponibilidad para fechas >= hoy
+    if (fechaComparar >= hoy) {
+      const fechaStr = date.toISOString().split('T')[0];
+      return fechasSinDisponibilidad.has(fechaStr);
+    }
+    
+    return false;
   };
 
   // Verificar disponibilidad cuando selecciona horario
@@ -179,6 +205,9 @@ function ReservationWizard() {
         texto: '¡Reserva confirmada! Recibirás un email de confirmación.'
       });
       
+      // Recargar disponibilidad antes de resetear
+      await cargarFechasSinDisponibilidad();
+      
       setTimeout(() => {
         resetWizard();
       }, 2000);
@@ -194,33 +223,47 @@ function ReservationWizard() {
     }
   };
 
+  // Función para formatear horario sin segundos
+  const formatearHorario = (horario: string) => {
+    // Si el horario tiene formato HH:MM:SS, lo convertimos a HH:MM
+    const partes = horario.split(':');
+    if (partes.length >= 2) {
+      return `${partes[0]}:${partes[1]}`;
+    }
+    return horario;
+  };
+
   return (
     <div className="w-full max-w-3xl mx-auto">
-      {/* Progress Bar */}
-      <div className="mb-6">
-        <div className="flex justify-between items-center mb-2">
-          {[1, 2, 3, 4].map((s) => (
-            <div key={s} className="flex items-center flex-1">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-semibold text-sm transition-all ${
-                step >= s ? 'bg-orange-500 text-white' : 'bg-gray-300 text-gray-600'
-              }`}>
-                {s}
-              </div>
-              {s < 4 && (
-                <div className={`flex-1 h-1 mx-2 transition-all ${
-                  step > s ? 'bg-orange-500' : 'bg-gray-300'
-                }`} />
-              )}
-            </div>
-          ))}
-        </div>
-        <div className="flex justify-between text-xs text-gray-600 mt-2">
-          <span>Comensales</span>
-          <span>Fecha</span>
-          <span>Datos</span>
-          <span>Confirmar</span>
-        </div>
+    <div className="grid grid-cols-4 gap-0">
+  {[1, 2, 3, 4].map((s, idx) => (
+    <div key={s} className="flex flex-col items-center relative">
+
+      {/* Línea izquierda */}
+      {idx > 0 && (
+        <div
+          className={`absolute top-4 left-[-50%] w-full h-1 ${
+            step >= s ? 'bg-orange-500' : 'bg-gray-300'
+          }`}
+        />
+      )}
+
+      {/* Número */}
+      <div
+        className={`z-10 w-8 h-8 rounded-full flex items-center justify-center font-semibold text-sm transition-all
+        ${step >= s ? 'bg-orange-500 text-white' : 'bg-gray-300 text-gray-600'}`}
+      >
+        {s}
       </div>
+
+      {/* Texto */}
+      <span className="mt-2 text-xs text-gray-600 text-center">
+        {['Comensales', 'Fecha', 'Datos', 'Confirmar'][idx]}
+      </span>
+    </div>
+  ))}
+</div>
+
 
       <style>{`
         .react-datepicker {
@@ -274,10 +317,16 @@ function ReservationWizard() {
         .react-datepicker__day--disabled {
           color: #d1d5db;
           cursor: not-allowed;
+        }
+        .react-datepicker__day--disabled:hover {
+          background-color: transparent;
+        }
+        /* Clase especial solo para fechas futuras sin disponibilidad */
+        .react-datepicker__day.fecha-sin-disponibilidad {
           background-color: #fecaca !important;
           opacity: 0.6;
         }
-        .react-datepicker__day--disabled:hover {
+        .react-datepicker__day.fecha-sin-disponibilidad:hover {
           background-color: #fecaca !important;
         }
         .react-datepicker__day--outside-month {
@@ -301,7 +350,7 @@ function ReservationWizard() {
       `}</style>
 
       {/* Card Container */}
-      <div className="bg-white rounded-2xl shadow-xl p-6 flex flex-col" style={{ minHeight: '450px' }}>
+      <div className="bg-white rounded-2xl shadow-xl p-6 flex flex-  " style={{ minHeight: '450px' }}>
         {/* Step 1: Personas */}
         {step === 1 && (
           <div className="flex-1 flex flex-col">
@@ -404,6 +453,18 @@ function ReservationWizard() {
                 inline
                 minDate={new Date()}
                 filterDate={(date) => !isFechaDeshabilitada(date)}
+                dayClassName={(date) => {
+                  const hoy = new Date();
+                  hoy.setHours(0, 0, 0, 0);
+                  const fechaComparar = new Date(date);
+                  fechaComparar.setHours(0, 0, 0, 0);
+                  
+                  // Solo aplicar clase especial a fechas futuras sin disponibilidad
+                  if (fechaComparar >= hoy && isFechaDeshabilitada(date)) {
+                    return 'fecha-sin-disponibilidad';
+                  }
+                  return '';
+                }}
                 locale="es"
                 dateFormat="dd/MM/yyyy"
               />
@@ -450,7 +511,7 @@ function ReservationWizard() {
                         }`}
                         title={`${lugares_disponibles} lugares disponibles`}
                       >
-                        {hora}
+                        {formatearHorario(hora)}
                         <span className="block text-[10px] opacity-70">
                           {lugares_disponibles}
                         </span>
