@@ -164,10 +164,6 @@ useEffect(() => {
       if (disponible) {
         setHorario(hora);
         setLugaresDisponibles(lugares);
-        setMensaje({
-          tipo: 'success',
-          texto: `¡Perfecto! Quedan ${lugares} lugares disponibles para este horario.`
-        });
       } else {
         setHorario(null);
         setMensaje({
@@ -359,10 +355,9 @@ useEffect(() => {
             <div className="text-center mb-6">
               <User className="w-12 h-12 mx-auto mb-3 text-orange-500" />
               <h2 className="text-2xl font-bold text-gray-800 mb-1">Escoja cantidad de comensales</h2>
-              <p className="text-sm text-gray-600">Selecciona el número de personas para tu reserva</p>
             </div>
             
-            <div className="flex flex-col items-center justify-center gap-3 mb-6">
+            <div className="flex flex-col items-center justify-center gap-3 m-6">
               <div className="flex gap-2">
                 {[1, 2, 3, 4].map((num) => (
                   <button
@@ -439,8 +434,7 @@ useEffect(() => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
               <h2 className="text-2xl font-bold text-gray-800 mb-1">Selecciona fecha y horario</h2>
-              <p className="text-sm text-gray-600">Elige cuándo quieres hacer tu reserva</p>
-              <p className="text-sm  text-gray-600 mt-1">(Las fechas en rojo no tienen disponibilidad)</p>
+              
             </div>
 
             <div className="mb-4 bg-gray-50 rounded-xl p-4 flex justify-center">
@@ -476,7 +470,7 @@ useEffect(() => {
               <div className="mb-4">
                 <h3 className="text-base font-semibold mb-2 flex items-center gap-2">
                   <Clock className="w-4 h-4 text-orange-500" />
-                  Horarios disponibles ({horariosDisponiblesParaFecha.length})
+                  Horarios disponibles
                 </h3>
                 
                 {/* Mensaje de disponibilidad */}
@@ -548,10 +542,9 @@ useEffect(() => {
             <div className="text-center mb-4">
               <User className="w-12 h-12 mx-auto mb-3 text-orange-500" />
               <h2 className="text-2xl font-bold text-gray-800 mb-1">Tus datos de contacto</h2>
-              <p className="text-sm text-gray-600">Necesitamos tu información para confirmar la reserva</p>
             </div>
 
-            <div className="space-y-3 mb-4">
+            <div className="space-y-3 m-4">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">
                   Nombre completo
