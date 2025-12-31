@@ -58,7 +58,7 @@ export async function obtenerHorariosDisponibles(
   }
 }
 
-// Verificar disponibilidad de un horario específico
+// Verificar disponibilidad de un horario específico - SIMPLIFICADO
 export async function verificarDisponibilidad(
   fecha: string,
   horario: string,
@@ -66,39 +66,15 @@ export async function verificarDisponibilidad(
 ): Promise<{ disponible: boolean; lugaresDisponibles: number }> {
   try {
     const horarios = await obtenerHorariosDisponibles(fecha, personas)
-    
     const horarioEncontrado = horarios.find(h => h.horario === horario)
     
-    if (horarioEncontrado) {
-      return {
-        disponible: true,
-        lugaresDisponibles: horarioEncontrado.lugares_disponibles
-      }
-    }
-    
-    // Si no está en la lista, calcular manualmente cuántos lugares quedan
-    const { data: config } = await supabase
-      .from('configuracion')
-      .select('capacidad_maxima')
-      .single()
-    
-    const capacidadMaxima = config?.capacidad_maxima || 0
-    
-    // Calcular ocupadas llamando a la función
-    const { data: ocupadas } = await supabase.rpc('personas_ocupadas_en_ventana', {
-      p_fecha: fecha,
-      p_horario: horario
-    })
-    
-    const lugaresDisponibles = capacidadMaxima - (ocupadas || 0)
-    
     return {
-      disponible: false,
-      lugaresDisponibles: Math.max(0, lugaresDisponibles)
+      disponible: !!horarioEncontrado,
+      lugaresDisponibles: horarioEncontrado?.lugares_disponibles || 0
     }
   } catch (error) {
     console.error('Error al verificar disponibilidad:', error)
-    throw error
+    return { disponible: false, lugaresDisponibles: 0 }
   }
 }
 

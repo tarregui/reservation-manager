@@ -1,13 +1,9 @@
-/* eslint-disable react-hooks/exhaustive-deps */
-import { useState, useEffect, useCallback } from "react";
-import { User, Clock, CheckCircle, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react';
-import DatePicker from "react-datepicker";
-import "react-datepicker/dist/react-datepicker.css";
+import { useState } from "react";
+import { User, CheckCircle, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react';
+import BiWeeklyCalendar from './BiWeeklyCalendar';
 import { verificarDisponibilidad, crearReserva, fechaTieneDisponibilidad, obtenerHorariosDisponibles } from '../lib/reservations';
 
 function ReservationWizard() {
-
-
   const [step, setStep] = useState(1);
   const [personas, setPersonas] = useState<number | null>(null);
   const [fecha, setFecha] = useState<Date | null>(null);
@@ -21,73 +17,6 @@ function ReservationWizard() {
   const [mensaje, setMensaje] = useState<{tipo: 'error' | 'success' | 'warning', texto: string} | null>(null);
   const [loading, setLoading] = useState(false);
   const [lugaresDisponibles, setLugaresDisponibles] = useState<number | null>(null);
-  const [fechasSinDisponibilidad, setFechasSinDisponibilidad] = useState<Set<string>>(new Set());
-  const [horariosDisponiblesParaFecha, setHorariosDisponiblesParaFecha] = useState<Array<{horario: string, lugares_disponibles: number}>>([]);
-
-  // Cargar fechas sin disponibilidad cuando cambia el número de personas
-  useEffect(() => {
-    if (!personas) return;
-    cargarFechasSinDisponibilidad();
-  }, [personas]);
-
-  // Hacer la función accesible desde el useEffect
-const cargarFechasSinDisponibilidad = useCallback(async () => {
-  if (!personas) return;
-
-  const fechas = new Set<string>();
-  const hoy = new Date();
-  hoy.setHours(0, 0, 0, 0);
-  
-  // Verificar los próximos 60 días
-  for (let i = 0; i < 60; i++) {
-    const fecha = new Date(hoy);
-    fecha.setDate(hoy.getDate() + i);
-    const fechaStr = fecha.toISOString().split('T')[0];
-    
-    const tieneDisponibilidad = await fechaTieneDisponibilidad(fechaStr, personas);
-    
-    if (!tieneDisponibilidad) {
-      fechas.add(fechaStr);
-    }
-  }
-  
-  setFechasSinDisponibilidad(fechas);
-}, [personas]);
-
-// Recargar disponibilidad cuando se selecciona una fecha
-useEffect(() => {
-  if (fecha && personas) {
-    // Recargar las fechas sin disponibilidad después de un breve delay
-    const timeout = setTimeout(() => {
-      cargarFechasSinDisponibilidad();
-    }, 100);
-    
-    return () => clearTimeout(timeout);
-  }
-}, [fecha, personas, cargarFechasSinDisponibilidad]);
-
-  // Cargar horarios cuando se selecciona una fecha
-  useEffect(() => {
-    if (fecha && personas) {
-      cargarHorariosDisponibles();
-    }
-  }, [fecha, personas]);
-  
-  
-  const cargarHorariosDisponibles = async () => {
-    if (!fecha || !personas) return;
-    
-    setLoading(true);
-    try {
-      const fechaStr = fecha.toISOString().split('T')[0];
-      const horarios = await obtenerHorariosDisponibles(fechaStr, personas);
-      setHorariosDisponiblesParaFecha(horarios);
-    } catch (error) {
-      console.error('Error al cargar horarios:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const nextStep = () => {
     if (step === 3 && !validateForm()) return;
@@ -126,29 +55,16 @@ useEffect(() => {
     setErrors({});
     setMensaje(null);
     setLugaresDisponibles(null);
-    setFechasSinDisponibilidad(new Set());
-    setHorariosDisponiblesParaFecha([]);
   };
 
-  // Verificar si una fecha debe estar deshabilitada (solo para fechas >= hoy)
-  const isFechaDeshabilitada = (date: Date) => {
-    const hoy = new Date();
-    hoy.setHours(0, 0, 0, 0);
-    const fechaComparar = new Date(date);
-    fechaComparar.setHours(0, 0, 0, 0);
-    
-    // Solo aplicar el filtro de disponibilidad para fechas >= hoy
-    if (fechaComparar >= hoy) {
-      const fechaStr = date.toISOString().split('T')[0];
-      return fechasSinDisponibilidad.has(fechaStr);
-    }
-    
-    return false;
+  const handleDateSelect = (date: Date) => {
+    setFecha(date);
+    setHorario(null);
+    setMensaje(null);
   };
 
-  // Verificar disponibilidad cuando selecciona horario
-  const handleSeleccionarHorario = async (hora: string) => {
-    if (!fecha || !personas) return;
+  const handleTimeSelect = async (time: string) => {
+    if (!fecha || !personas || !time) return;
     
     setLoading(true);
     setMensaje(null);
@@ -157,41 +73,57 @@ useEffect(() => {
       const fechaStr = fecha.toISOString().split('T')[0];
       const { disponible, lugaresDisponibles: lugares } = await verificarDisponibilidad(
         fechaStr, 
-        hora, 
+        time, 
         personas
       );
       
       if (disponible) {
-        setHorario(hora);
+        setHorario(time);
         setLugaresDisponibles(lugares);
       } else {
         setHorario(null);
         setMensaje({
           tipo: 'error',
-          texto: `Lo sentimos, no hay suficiente espacio. Solo quedan ${lugares} lugares disponibles para este horario.`
+          texto: `Solo quedan ${lugares} lugares disponibles para este horario.`
         });
       }
     } catch (error) {
       console.error('Error al verificar disponibilidad:', error);
       setMensaje({
         tipo: 'error',
-        texto: 'Error al verificar disponibilidad. Por favor intenta nuevamente.'
+        texto: 'Error al verificar disponibilidad.'
       });
     } finally {
       setLoading(false);
     }
   };
 
-  // Finalizar reserva
   const finalizarReserva = async () => {
     if (!fecha || !horario || !personas) return;
     
     setLoading(true);
     
     try {
+      const fechaStr = fecha.toISOString().split('T')[0];
+      const { disponible } = await verificarDisponibilidad(
+        fechaStr, 
+        horario, 
+        personas
+      );
+      
+      if (!disponible) {
+        setMensaje({
+          tipo: 'error',
+          texto: 'Lo sentimos, este horario acaba de ser reservado por otro cliente. Por favor selecciona otro horario.'
+        });
+        setStep(2);
+        setLoading(false);
+        return;
+      }
+      
       await crearReserva({
         personas,
-        fecha: fecha.toISOString().split('T')[0],
+        fecha: fechaStr,
         horario,
         nombre: formData.nombre,
         email: formData.email,
@@ -203,152 +135,63 @@ useEffect(() => {
         texto: '¡Reserva confirmada! Recibirás un email de confirmación.'
       });
       
-      // Recargar disponibilidad antes de resetear
-      await cargarFechasSinDisponibilidad();
-      
       setTimeout(() => {
         resetWizard();
       }, 2000);
       
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error al crear reserva:', error);
-      setMensaje({
-        tipo: 'error',
-        texto: 'Error al crear la reserva. Por favor intenta nuevamente.'
-      });
+      
+      if (error instanceof Error && error.message?.includes('No hay disponibilidad')) {
+        setMensaje({
+          tipo: 'error',
+          texto: 'Este horario acaba de ser reservado. Por favor selecciona otro.'
+        });
+        setStep(2);
+      } else {
+        setMensaje({
+          tipo: 'error',
+          texto: 'Error al crear la reserva. Por favor intenta nuevamente.'
+        });
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  // Función para formatear horario sin segundos
   const formatearHorario = (horario: string) => {
-    // Si el horario tiene formato HH:MM:SS, lo convertimos a HH:MM
     const partes = horario.split(':');
-    if (partes.length >= 2) {
-      return `${partes[0]}:${partes[1]}`;
-    }
-    return horario;
+    return partes.length >= 2 ? `${partes[0]}:${partes[1]}` : horario;
   };
 
   return (
     <div className="w-full max-w-3xl mx-auto">
-    <div className="grid grid-cols-4 gap-0 mb-5">
-      {[1, 2, 3, 4].map((s, idx) => (
-        <div key={s} className="flex flex-col items-center relative">
-        
-          {/* Línea izquierda */}
-          {idx > 0 && (
+      {/* Progress Bar */}
+      <div className="grid grid-cols-4 gap-0 mb-5">
+        {[1, 2, 3, 4].map((s, idx) => (
+          <div key={s} className="flex flex-col items-center relative">
+            {idx > 0 && (
+              <div
+                className={`absolute top-4 left-[-50%] w-full h-1 ${
+                  step >= s ? 'bg-orange-500' : 'bg-gray-300'
+                }`}
+              />
+            )}
             <div
-              className={`absolute top-4 left-[-50%] w-full h-1 ${
-                step >= s ? 'bg-orange-500' : 'bg-gray-300'
-              }`}
-            />
-          )}
-
-          {/* Número */}
-          <div
-            className={`z-10 w-8 h-8 rounded-full flex items-center justify-center font-semibold text-sm transition-all
-            ${step >= s ? 'bg-orange-500 text-white' : 'bg-gray-300 text-gray-600'}`}
-          >
-            {s}
+              className={`z-10 w-8 h-8 rounded-full flex items-center justify-center font-semibold text-sm transition-all
+              ${step >= s ? 'bg-orange-500 text-white' : 'bg-gray-300 text-gray-600'}`}
+            >
+              {s}
+            </div>
+            <span className="mt-2 text-xs text-gray-600 text-center">
+              {['Comensales', 'Fecha', 'Datos', 'Confirmar'][idx]}
+            </span>
           </div>
-            
-          {/* Texto */}
-          <span className="mt-2 text-xs text-gray-600 text-center">
-            {['Comensales', 'Fecha', 'Datos', 'Confirmar'][idx]}
-          </span>
-        </div>
-      ))}
-    </div>
-
-
-      <style>{`
-        .react-datepicker {
-          font-family: inherit;
-          border: none;
-          box-shadow: none;
-        }
-        .react-datepicker__header {
-          background-color: #f9fafb;
-          border-bottom: 1px solid #e5e7eb;
-          padding-top: 1rem;
-        }
-        .react-datepicker__current-month {
-          font-weight: 600;
-          color: #1f2937;
-          text-transform: capitalize;
-          font-size: 0.95rem;
-          margin-bottom: 0.5rem;
-        }
-        .react-datepicker__day-name {
-          color: #6b7280;
-          font-weight: 600;
-          font-size: 0.75rem;
-          width: 2.5rem;
-          line-height: 2.5rem;
-        }
-        .react-datepicker__day {
-          width: 2.5rem;
-          line-height: 2.5rem;
-          font-size: 0.875rem;
-          border-radius: 0.5rem;
-          margin: 0.15rem;
-          transition: all 0.2s;
-        }
-        .react-datepicker__day:hover {
-          background-color: #fed7aa;
-          border-radius: 0.5rem;
-        }
-        .react-datepicker__day--selected {
-          background-color: #f97316;
-          color: white;
-          font-weight: 600;
-        }
-        .react-datepicker__day--selected:hover {
-          background-color: #ea580c;
-        }
-        .react-datepicker__day--keyboard-selected {
-          background-color: #fed7aa;
-          color: #1f2937;
-        }
-        .react-datepicker__day--disabled {
-          color: #d1d5db;
-          cursor: not-allowed;
-        }
-        .react-datepicker__day--disabled:hover {
-          background-color: transparent;
-        }
-        /* Clase especial solo para fechas futuras sin disponibilidad */
-        .react-datepicker__day.fecha-sin-disponibilidad {
-          background-color: #fecaca !important;
-          opacity: 0.6;
-        }
-        .react-datepicker__day.fecha-sin-disponibilidad:hover {
-          background-color: #fecaca !important;
-        }
-        .react-datepicker__day--outside-month {
-          color: #d1d5db;
-        }
-        .react-datepicker__navigation {
-          top: 1rem;
-        }
-        .react-datepicker__navigation--previous {
-          left: 1rem;
-        }
-        .react-datepicker__navigation--next {
-          right: 1rem;
-        }
-        .react-datepicker__navigation-icon::before {
-          border-color: #6b7280;
-        }
-        .react-datepicker__navigation:hover .react-datepicker__navigation-icon::before {
-          border-color: #1f2937;
-        }
-      `}</style>
+        ))}
+      </div>
 
       {/* Card Container */}
-      <div className="bg-white rounded-2xl shadow-xl p-6 flex flex-  " style={{ minHeight: '450px' }}>
+      <div className="bg-white rounded-2xl shadow-xl p-6 flex flex-col" style={{ minHeight: '450px' }}>
         {/* Step 1: Personas */}
         {step === 1 && (
           <div className="flex-1 flex flex-col">
@@ -426,99 +269,38 @@ useEffect(() => {
           </div>
         )}
 
-        {/* Step 2: Fecha y Horario */}
-        {step === 2 && (
-          <div className="flex-1 flex flex-col overflow-y-auto">
+        {/* Step 2: Fecha y Horario con BiWeeklyCalendar */}
+        {step === 2 && personas && (
+          <div className="flex-1 flex flex-col">
             <div className="text-center mb-4">
               <svg className="w-12 h-12 mx-auto mb-3 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
               <h2 className="text-2xl font-bold text-gray-800 mb-1">Selecciona fecha y horario</h2>
-              
             </div>
 
-            <div className="mb-4 bg-gray-50 rounded-xl p-4 flex justify-center">
-              <DatePicker
-                selected={fecha}
-                onChange={(date: Date | null) => {
-                  setFecha(date);
-                  setHorario(null);
-                  setMensaje(null);
-                  setLugaresDisponibles(null);
-                }}
-                inline
-                minDate={new Date()}
-                filterDate={(date) => !isFechaDeshabilitada(date)}
-                dayClassName={(date) => {
-                  const hoy = new Date();
-                  hoy.setHours(0, 0, 0, 0);
-                  const fechaComparar = new Date(date);
-                  fechaComparar.setHours(0, 0, 0, 0);
-                  
-                  // Solo aplicar clase especial a fechas futuras sin disponibilidad
-                  if (fechaComparar >= hoy && isFechaDeshabilitada(date)) {
-                    return 'fecha-sin-disponibilidad';
-                  }
-                  return '';
-                }}
-                locale="es"
-                dateFormat="dd/MM/yyyy"
-              />
-            </div>
-
-            {fecha && (
-              <div className="mb-4">
-                <h3 className="text-base font-semibold mb-2 flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-orange-500" />
-                  Horarios disponibles
-                </h3>
-                
-                {/* Mensaje de disponibilidad */}
-                {mensaje && (
-                  <div className={`mb-3 p-3 rounded-lg flex items-start gap-2 text-sm ${
-                    mensaje.tipo === 'error' 
-                      ? 'bg-red-50 text-red-800 border border-red-200' 
-                      : mensaje.tipo === 'success'
-                      ? 'bg-green-50 text-green-800 border border-green-200'
-                      : 'bg-yellow-50 text-yellow-800 border border-yellow-200'
-                  }`}>
-                    <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
-                    <span>{mensaje.texto}</span>
-                  </div>
-                )}
-                
-                {horariosDisponiblesParaFecha.length === 0 ? (
-                  <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-center text-sm text-red-800">
-                    No hay horarios disponibles para esta fecha con {personas} personas
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-6 gap-1.5">
-                    {horariosDisponiblesParaFecha.map(({ horario: hora, lugares_disponibles }) => (
-                      <button
-                        key={hora}
-                        onClick={() => handleSeleccionarHorario(hora)}
-                        disabled={loading}
-                        className={`p-1.5 rounded-lg font-medium text-xs transition-all relative ${
-                          horario === hora
-                            ? 'bg-orange-500 text-white'
-                            : loading
-                            ? 'bg-gray-100 text-gray-400 cursor-wait'
-                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                        }`}
-                        title={`${lugares_disponibles} lugares disponibles`}
-                      >
-                        {formatearHorario(hora)}
-                        <span className="block text-[10px] opacity-70">
-                          {lugares_disponibles}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                )}
+            {mensaje && (
+              <div className={`mb-3 p-3 rounded-lg flex items-start gap-2 text-sm ${
+                mensaje.tipo === 'error' 
+                  ? 'bg-red-50 text-red-800 border border-red-200' 
+                  : 'bg-yellow-50 text-yellow-800 border border-yellow-200'
+              }`}>
+                <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                <span>{mensaje.texto}</span>
               </div>
             )}
 
-            <div className="flex justify-between mt-auto pt-3">
+            <BiWeeklyCalendar
+              personas={personas}
+              onDateSelect={handleDateSelect}
+              onTimeSelect={handleTimeSelect}
+              selectedDate={fecha}
+              selectedTime={horario}
+              fechaTieneDisponibilidad={fechaTieneDisponibilidad}
+              obtenerHorariosDisponibles={obtenerHorariosDisponibles}
+            />
+
+            <div className="flex justify-between mt-4">
               <button
                 onClick={prevStep}
                 className="flex items-center gap-2 px-5 py-2 bg-gray-200 text-gray-700 rounded-lg font-semibold text-sm hover:bg-gray-300 transition-all"
@@ -546,9 +328,7 @@ useEffect(() => {
 
             <div className="space-y-3 m-4">
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Nombre completo
-                </label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Nombre completo</label>
                 <input
                   type="text"
                   value={formData.nombre}
@@ -561,15 +341,11 @@ useEffect(() => {
                   } focus:outline-none focus:ring-2 focus:ring-orange-500`}
                   placeholder="Juan Pérez"
                 />
-                {errors.nombre && (
-                  <p className="text-red-500 text-xs mt-1">{errors.nombre}</p>
-                )}
+                {errors.nombre && <p className="text-red-500 text-xs mt-1">{errors.nombre}</p>}
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Email
-                </label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Email</label>
                 <input
                   type="email"
                   value={formData.email}
@@ -582,15 +358,11 @@ useEffect(() => {
                   } focus:outline-none focus:ring-2 focus:ring-orange-500`}
                   placeholder="juan@ejemplo.com"
                 />
-                {errors.email && (
-                  <p className="text-red-500 text-xs mt-1">{errors.email}</p>
-                )}
+                {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Teléfono
-                </label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Teléfono</label>
                 <input
                   type="tel"
                   value={formData.telefono}
@@ -603,9 +375,7 @@ useEffect(() => {
                   } focus:outline-none focus:ring-2 focus:ring-orange-500`}
                   placeholder="+54 9 11 1234-5678"
                 />
-                {errors.telefono && (
-                  <p className="text-red-500 text-xs mt-1">{errors.telefono}</p>
-                )}
+                {errors.telefono && <p className="text-red-500 text-xs mt-1">{errors.telefono}</p>}
               </div>
             </div>
 
@@ -635,7 +405,6 @@ useEffect(() => {
               <p className="text-sm text-gray-600">Revisa los detalles de tu reserva</p>
             </div>
 
-            {/* Mensaje de confirmación/error */}
             {mensaje && (
               <div className={`mb-4 p-3 rounded-lg flex items-start gap-2 text-sm ${
                 mensaje.tipo === 'error' 
@@ -668,7 +437,7 @@ useEffect(() => {
                       year: 'numeric', 
                       month: 'long', 
                       day: 'numeric' 
-                    })} a las {horario}
+                    })} a las {formatearHorario(horario || '')}
                   </p>
                 </div>
               </div>
@@ -685,14 +454,14 @@ useEffect(() => {
               <button
                 onClick={prevStep}
                 disabled={loading}
-                className="flex items-center gap-2 px-5 py-2 bg-gray-200 text-gray-700 rounded-lg font-semibold text-sm hover:bg-gray-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center gap-2 px-5 py-2 bg-gray-200 text-gray-700 rounded-lg font-semibold text-sm hover:bg-gray-300 transition-all disabled:opacity-50"
               >
                 <ChevronLeft className="w-4 h-4" /> Modificar
               </button>
               <button
                 onClick={finalizarReserva}
                 disabled={loading}
-                className="flex items-center gap-2 px-5 py-2 bg-green-500 text-white rounded-lg font-semibold text-sm hover:bg-green-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center gap-2 px-5 py-2 bg-green-500 text-white rounded-lg font-semibold text-sm hover:bg-green-600 transition-all disabled:opacity-50"
               >
                 {loading ? (
                   <>
@@ -727,7 +496,7 @@ useEffect(() => {
             )}
             {horario && (
               <span className="font-semibold text-gray-800">
-                🕐 {horario}
+                🕐 {formatearHorario(horario)}
               </span>
             )}
             {lugaresDisponibles !== null && horario && (
