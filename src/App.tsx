@@ -5,7 +5,7 @@ import AdminPortal from "./pages/AdminPortal";
 
 function App() {
 const bg = {
-    backgroundColor: "#f7ece6"
+    backgroundColor: "#f7f7f7"
   };
   return(
     <div style={bg} className=' min-h-screen'>
